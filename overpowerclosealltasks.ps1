@@ -1,0 +1,77 @@
+<#
+.SINOPSIS
+    Menutup semua proses pengguna setiap 1 detik (mode overpower).
+    Explorer.exe dikecualikan agar desktop dan taskbar tetap berfungsi.
+.DESCRIPTION
+    Script ini berjalan terus-menerus, mengambil daftar proses setiap detik,
+    dan menghentikan paksa semua proses milik pengguna (kecuali yang termasuk
+    dalam daftar pengecualian). Tekan 'Q' untuk berhenti.
+.NOTES
+    Jalankan sebagai Administrator untuk hasil maksimal.
+    Versi: 1.0
+#>
+
+# Daftar proses yang TIDAK akan ditutup (proses sistem penting dan shell)
+$excludeProcesses = @(
+    'Idle', 'System', 'Registry',           # Proses kernel
+    'smss', 'csrss', 'wininit', 'services', # Inisialisasi sistem
+    'lsass', 'winlogon',                     # Keamanan & login
+    'fontdrvhost', 'dwm',                     # Desktop Window Manager
+    'svchost',                                 # Service Host
+    'spoolsv',                                 # Print Spooler
+    'sihost', 'RuntimeBroker',                 # Infrastructure
+    'SearchUI', 'ShellExperienceHost',         # Windows Search & UI
+    'StartMenuExperienceHost',                  # Start Menu
+    'ctfmon',                                    # Language bar
+    'taskmgr',                                    # Task Manager
+    'cmd', 'powershell', 'pwsh', 'conhost',       # Console
+    'WindowsTerminal',                             # Windows Terminal
+    'explorer'                                      # Windows Explorer (desktop)
+)
+
+Write-Host "🔥 OVERPOWER MODE AKTIF 🔥" -ForegroundColor Red
+Write-Host "Menutup semua proses pengguna setiap 1 detik." -ForegroundColor Yellow
+Write-Host "Explorer.exe dilindungi, desktop tetap aman." -ForegroundColor Green
+Write-Host "Tekan 'Q' untuk berhenti." -ForegroundColor Green
+
+while ($true) {
+    $currentPID = $PID   # ID script ini agar tidak menutup diri sendiri
+
+    # Ambil semua proses milik user (SessionId > 0) kecuali yang dikecualikan
+    $processes = Get-Process | Where-Object {
+        $_.SessionId -gt 0 -and
+        $_.Id -ne $currentPID -and
+        $_.ProcessName -notin $excludeProcesses
+    }
+
+    # Tampilkan jumlah proses yang akan ditutup
+    if ($processes.Count -gt 0) {
+        Write-Host "`n[$(Get-Date -Format 'HH:mm:ss')] Menutup $($processes.Count) proses..." -ForegroundColor Cyan
+    }
+
+    # Hentikan setiap proses
+    foreach ($proc in $processes) {
+        try {
+            Write-Host "   ⚡ Menghentikan $($proc.ProcessName) (PID: $($proc.Id))" -ForegroundColor Magenta
+            Stop-Process -Id $proc.Id -Force -ErrorAction Stop
+        } catch {
+            Write-Host "   ❌ Gagal menghentikan $($proc.ProcessName): $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
+
+    # Tunggu 1 detik, lalu cek apakah user menekan 'Q' untuk keluar
+    Start-Sleep -Seconds 1
+
+    # Cek input keyboard (hanya berfungsi di console)
+    try {
+        if ([Console]::KeyAvailable) {
+            $key = [Console]::ReadKey($true)
+            if ($key.Key -eq 'Q') {
+                Write-Host "`n🛑 Dihentikan oleh pengguna." -ForegroundColor Green
+                break
+            }
+        }
+    } catch {
+        # Abaikan error jika tidak berada di console (misal di ISE)
+    }
+}
